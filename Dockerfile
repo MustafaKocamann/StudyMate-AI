@@ -19,6 +19,12 @@ RUN python -m pip install --upgrade pip \
 COPY .streamlit ./.streamlit
 COPY streamlit_app.py ./
 
+RUN addgroup --system --gid 10001 appgroup \
+    && adduser --system --uid 10001 --ingroup appgroup --home /home/appuser appuser \
+    && chown -R appuser:appgroup /app /home/appuser
+
+USER 10001:10001
+
 EXPOSE 8501
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
