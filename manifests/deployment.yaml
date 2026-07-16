@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: study-buddy
-          image: mustafakocaman/studymate:v3
+          image: mustafakocaman/studymate:v4
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
