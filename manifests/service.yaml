@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: study-buddy
+  labels:
+    app.kubernetes.io/name: study-buddy
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: study-buddy-ai
+spec:
+  # NodePort is for the current Minikube workflow. Future GKE/GitOps
+  # environments may replace it with ClusterIP behind Ingress or LoadBalancer.
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: study-buddy
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http

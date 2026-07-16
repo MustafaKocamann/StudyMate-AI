@@ -1,0 +1,11 @@
+.env
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+logs/
+.uv-cache/
+*.egg-info/
+.cagent/
+.antigravity-ide/
+.gemini/

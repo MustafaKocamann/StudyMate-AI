@@ -1,0 +1,8 @@
+langchain
+python-dotenv
+streamlit
+fastapi
+pandas 
+langchain-groq
+groq
+pydantic-settings
