@@ -7,12 +7,14 @@ import asyncio
 from pydantic import ValidationError
 import streamlit as st
 
+from src.application.question_service import question_type_blueprint
 from src.application.progress_service import ProgressService
 from src.application.review_service import ReviewService
 from src.application.study_session_service import AnswerSubmissionConflictError, StudySessionService
 from src.common.exceptions import StudyBuddyException
 from src.common.logger import get_logger
-from src.models.question_schemas import DifficultyLevel
+from src.generator.regeneration import QuestionGenerationRequest
+from src.models.question_schemas import DifficultyLevel, QuestionSet
 from src.models.study_session import StudyQuestionMode
 from src.ui.components.answer_form import render_answer_form
 from src.ui.components.feedback_panel import render_feedback_panel
@@ -50,7 +52,10 @@ def render_practice_page() -> None:
     st.caption(f"{session.topic} · {difficulty_label} · {session.language}")
 
     completed_count = len(session.attempts)
-    total_count = len(session.questions)
+    total_count = max(
+        len(session.questions),
+        int(st.session_state.get(StateKey.PRACTICE_TARGET_COUNT.value, len(session.questions))),
+    )
     st.progress(
         completed_count / total_count,
         text=f"Question {session.current_position} of {total_count}",
@@ -59,6 +64,9 @@ def render_practice_page() -> None:
 
     preferences = st.session_state[StateKey.USER_PREFERENCES.value]
     if phase() == UIPhase.FEEDBACK:
+        generation_error = st.session_state.get(StateKey.GENERATION_ERROR.value)
+        if generation_error:
+            st.error(generation_error)
         feedback = st.session_state.get(StateKey.LAST_FEEDBACK.value)
         if feedback is not None:
             latest_attempt = session.attempts[-1]
@@ -68,7 +76,9 @@ def render_practice_page() -> None:
                 confidence=latest_attempt.confidence,
                 hints_used=latest_attempt.hints_used,
             )
-        next_label = "Finish session" if session.current_position == total_count else "Next question"
+        next_label = "Finish session" if session.current_position == total_count else (
+            "Try next question" if generation_error else "Next question"
+        )
         if st.button(
             next_label,
             type="primary",
@@ -81,11 +91,73 @@ def render_practice_page() -> None:
                 position=session.current_position,
             ),
         ):
-            updated = StudySessionService().advance(session)
+            working_session = session
+            if session.current_position < total_count and session.current_position == len(session.questions):
+                next_position = len(session.questions) + 1
+                question_service = st.session_state.get(StateKey.QUESTION_SERVICE.value)
+                if question_service is None:
+                    st.session_state[StateKey.GENERATION_ERROR.value] = (
+                        "The next question could not be prepared. Please try again."
+                    )
+                    request_rerun()
+                    return
+                with st.status("Preparing the next question", expanded=True) as next_status:
+                    try:
+                        generation_result = asyncio.run(
+                            question_service.generate_question(
+                                QuestionGenerationRequest(
+                                    topic=session.topic,
+                                    difficulty=session.requested_difficulty,
+                                    question_type=question_type_blueprint(
+                                        session.requested_question_type,
+                                        total_count,
+                                    )[next_position - 1],
+                                    position=next_position,
+                                    language=session.language,
+                                ),
+                                existing_questions=session.questions,
+                            )
+                        )
+                        working_session = StudySessionService().append_question(
+                            session,
+                            generation_result.question,
+                        )
+                    except (ValidationError, ValueError, StudyBuddyException) as exc:
+                        next_status.update(
+                            label="Next question could not be prepared",
+                            state="error",
+                            expanded=False,
+                        )
+                        st.session_state[StateKey.GENERATION_ERROR.value] = safe_error_message(exc)
+                        request_rerun()
+                        return
+                    except Exception as exc:
+                        logger.exception(
+                            "practice_next_generation_unexpected_failure",
+                            extra={
+                                "event": "practice_next_generation_unexpected_failure",
+                                "error_type": type(exc).__name__,
+                            },
+                        )
+                        next_status.update(
+                            label="Next question could not be prepared",
+                            state="error",
+                            expanded=False,
+                        )
+                        st.session_state[StateKey.GENERATION_ERROR.value] = safe_error_message(exc)
+                        request_rerun()
+                        return
+                    next_status.update(
+                        label="Next question ready",
+                        state="complete",
+                        expanded=False,
+                    )
+            updated = StudySessionService().advance(working_session)
             repository().save_session(updated)
             st.session_state[StateKey.ACTIVE_SESSION.value] = updated
             st.session_state[StateKey.LAST_FEEDBACK.value] = None
             st.session_state[StateKey.HINT_TEXT.value] = None
+            st.session_state[StateKey.GENERATION_ERROR.value] = None
             set_phase(UIPhase.COMPLETED if updated.status.value == "completed" else UIPhase.ANSWERING)
             request_rerun()
         return
@@ -216,15 +288,23 @@ def _render_configuration() -> None:
     with st.status("Preparing your study session", expanded=True) as generation_status:
         generation_status.write("Generating questions and checking educational quality…")
         try:
-            question_set = asyncio.run(
-                question_service.generate_questions(
-                    topic=topic,
-                    difficulty=DifficultyLevel(difficulty),
-                    question_mode=StudyQuestionMode(question_mode),
-                    count=int(count),
-                    language=language,
+            requested_mode = StudyQuestionMode(question_mode)
+            requested_count = int(count)
+            generation_result = asyncio.run(
+                question_service.generate_question(
+                    QuestionGenerationRequest(
+                        topic=topic,
+                        difficulty=DifficultyLevel(difficulty),
+                        question_type=question_type_blueprint(
+                            requested_mode,
+                            requested_count,
+                        )[0],
+                        position=1,
+                        language=language,
+                    )
                 )
             )
+            question_set = QuestionSet(questions=[generation_result.question])
         except (ValidationError, ValueError, StudyBuddyException) as exc:
             generation_status.update(
                 label="Study session could not be prepared",
@@ -270,6 +350,7 @@ def _render_configuration() -> None:
     }
     repository().save_session(session)
     st.session_state[StateKey.ACTIVE_SESSION.value] = session
+    st.session_state[StateKey.PRACTICE_TARGET_COUNT.value] = int(count)
     set_phase(UIPhase.ANSWERING)
     request_rerun()
 

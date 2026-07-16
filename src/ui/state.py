@@ -35,6 +35,7 @@ class StateKey(StrEnum):
     HINT_LEVEL = "hint_level"
     HINT_TEXT = "hint_text"
     GENERATION_ERROR = "generation_error"
+    PRACTICE_TARGET_COUNT = "practice_target_count"
     ACTIVE_REVIEW_ITEM = "active_review_item"
     REVIEW_SESSION = "review_session"
     REVIEW_FEEDBACK = "review_feedback"
@@ -47,7 +48,7 @@ class StateKey(StrEnum):
 DEFAULT_PREFERENCES = {
     "default_language": "English",
     "default_difficulty": DifficultyLevel.MEDIUM.value,
-    "default_question_count": 5,
+    "default_question_count": 3,
     "show_explanations_automatically": True,
     "enable_confidence_capture": True,
     "enable_hints": False,
@@ -65,6 +66,7 @@ def initialize_state() -> None:
     st.session_state.setdefault(StateKey.HINT_LEVEL.value, 0)
     st.session_state.setdefault(StateKey.HINT_TEXT.value, None)
     st.session_state.setdefault(StateKey.GENERATION_ERROR.value, None)
+    st.session_state.setdefault(StateKey.PRACTICE_TARGET_COUNT.value, 0)
     st.session_state.setdefault(StateKey.USER_PREFERENCES.value, DEFAULT_PREFERENCES.copy())
     st.session_state.setdefault(StateKey.ACTIVE_REVIEW_ITEM.value, None)
     st.session_state.setdefault(StateKey.REVIEW_SESSION.value, None)
@@ -96,6 +98,7 @@ def reset_practice_flow() -> None:
     st.session_state[StateKey.HINT_LEVEL.value] = 0
     st.session_state[StateKey.HINT_TEXT.value] = None
     st.session_state[StateKey.GENERATION_ERROR.value] = None
+    st.session_state[StateKey.PRACTICE_TARGET_COUNT.value] = 0
     set_phase(UIPhase.CONFIGURING)
 
 

@@ -31,9 +31,42 @@ def validate_judge_evaluation(payload: Mapping[str, Any]) -> LLMJudgeReport:
     """Validate parsed judge JSON against the judge evaluation contract."""
 
     try:
-        return LLMJudgeReport.model_validate(payload)
+        return LLMJudgeReport.model_validate(_normalize_issue_strings(payload))
     except ValidationError as exc:
         raise QuestionJudgeResponseValidationError("judge response validation failed") from exc
+
+
+def _normalize_issue_strings(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize a common provider deviation without weakening the contract."""
+
+    normalized = dict(payload)
+    issue_codes = {
+        "answer_validity": "incorrect_declared_answer",
+        "distractor_quality": "obviously_wrong_distractor",
+        "explanation_quality": "weak_explanation",
+        "difficulty_alignment": "difficulty_mismatch",
+        "context_alignment": "topic_mismatch",
+        "answer_leakage": "answer_revealed_in_question",
+    }
+    for field_name, issue_code in issue_codes.items():
+        raw_result = normalized.get(field_name)
+        if not isinstance(raw_result, Mapping):
+            continue
+        result = dict(raw_result)
+        raw_issues = result.get("issues")
+        if isinstance(raw_issues, list):
+            result["issues"] = [
+                {
+                    "code": issue_code,
+                    "message": issue[:1_000],
+                    "affected_option_ids": [],
+                }
+                if isinstance(issue, str) and issue.strip()
+                else issue
+                for issue in raw_issues
+            ]
+        normalized[field_name] = result
+    return normalized
 
 
 def requires_secondary_judge(report: LLMJudgeReport) -> bool:

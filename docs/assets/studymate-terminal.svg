@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="118" viewBox="0 0 920 118" role="img" aria-labelledby="title description">
+  <title id="title">StudyMate quality pipeline</title>
+  <desc id="description">A subtle animated terminal banner reading quality-gated question generation and Streamlit, Gemini, Groq, Docker, Kubernetes, GitOps.</desc>
+  <style>
+    .panel { fill: #f6f8fa; stroke: #d0d7de; }
+    .chrome { fill: #57606a; }
+    .prompt { fill: #1a7f37; }
+    .copy { fill: #24292f; font: 600 18px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+    .stack { fill: #57606a; font: 14px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+    .cursor { fill: #1a7f37; animation: blink 1.1s steps(1, end) infinite; }
+    .line-one { animation: fade-one 8s ease-in-out infinite; }
+    .line-two { animation: fade-two 8s ease-in-out infinite; }
+    @keyframes blink { 0%, 48% { opacity: 1; } 49%, 100% { opacity: 0; } }
+    @keyframes fade-one { 0%, 42% { opacity: 1; } 50%, 92% { opacity: 0; } 100% { opacity: 1; } }
+    @keyframes fade-two { 0%, 42% { opacity: 0; } 50%, 92% { opacity: 1; } 100% { opacity: 0; } }
+    @media (prefers-color-scheme: dark) {
+      .panel { fill: #0d1117; stroke: #30363d; }
+      .chrome, .stack { fill: #8b949e; }
+      .prompt, .cursor { fill: #3fb950; }
+      .copy { fill: #e6edf3; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cursor, .line-one, .line-two { animation: none; }
+      .line-two { display: none; }
+    }
+  </style>
+  <rect class="panel" x="1" y="1" width="918" height="116" rx="12" />
+  <circle class="chrome" cx="24" cy="22" r="5" opacity=".45" />
+  <circle class="chrome" cx="42" cy="22" r="5" opacity=".65" />
+  <circle class="chrome" cx="60" cy="22" r="5" opacity=".85" />
+  <text class="prompt" x="24" y="65">$</text>
+  <g class="line-one">
+    <text class="copy" x="48" y="65">quality-gated question generation</text>
+    <rect class="cursor" x="430" y="48" width="10" height="21" rx="1" />
+  </g>
+  <g class="line-two">
+    <text class="copy" x="48" y="65">focused practice, feedback, and adaptive review</text>
+    <rect class="cursor" x="590" y="48" width="10" height="21" rx="1" />
+  </g>
+  <text class="stack" x="24" y="94">Streamlit · Gemini · Groq · Pydantic · Docker · Kubernetes · Jenkins · Argo CD</text>
+</svg>

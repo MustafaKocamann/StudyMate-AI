@@ -78,6 +78,26 @@ def test_study_session_creation_and_invariants() -> None:
             language="English",
             questions=[],
         )
+
+
+def test_study_session_service_appends_lazy_question_safely() -> None:
+    service = StudySessionService()
+    first = mcq_question(1)
+    session = service.start_session(
+        topic="Python",
+        difficulty=DifficultyLevel.EASY,
+        question_mode=StudyQuestionMode.MIXED,
+        language="English",
+        question_set=QuestionSet(questions=[first]),
+    )
+
+    updated = service.append_question(session, fill_question(2))
+
+    assert len(session.questions) == 1
+    assert len(updated.questions) == 2
+    assert updated.questions[1].position == 2
+    with pytest.raises(ValueError):
+        service.append_question(updated, first)
     with pytest.raises(ValidationError):
         StudySession(
             topic="Python",

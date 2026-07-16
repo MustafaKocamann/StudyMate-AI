@@ -332,6 +332,29 @@ def test_distractor_quality_is_not_applicable_for_fill_blank() -> None:
     assert distractor_quality.passed is None
 
 
+def test_long_correct_option_is_left_to_semantic_judge() -> None:
+    question = mcq_question(
+        options=[
+            {"id": "A", "text": "Respiration"},
+            {
+                "id": "B",
+                "text": "Photosynthesis converts incoming light into stored chemical energy for the plant.",
+            },
+            {"id": "C", "text": "Transpiration"},
+            {"id": "D", "text": "Fermentation"},
+        ]
+    )
+    checks, _, _ = run_deterministic_quality_checks(
+        question,
+        topic="plants light energy photosynthesis",
+    )
+    distractor_quality = next(
+        check for check in checks if check.dimension is QualityDimension.DISTRACTOR_QUALITY
+    )
+
+    assert distractor_quality.status is QualityStatus.PASSED
+
+
 def test_deterministic_checks_detect_answer_leakage() -> None:
     question = fill_blank_question(question="Photosynthesis happens through ___.")
     checks, _, _ = run_deterministic_quality_checks(question, topic="photosynthesis")
@@ -366,6 +389,22 @@ def test_weak_explanation_patterns_are_failed_deterministically() -> None:
     assert explanation.issues[0].code == "answer_only_explanation"
 
 
+def test_substantive_paraphrased_explanation_is_left_to_semantic_judge() -> None:
+    question = mcq_question(
+        explanation="Light energy is transformed and retained in glucose molecules for later use."
+    )
+    checks, _, _ = run_deterministic_quality_checks(
+        question,
+        topic="plants light energy photosynthesis",
+    )
+    explanation = next(
+        check for check in checks if check.dimension is QualityDimension.EXPLANATION_QUALITY
+    )
+
+    assert explanation.status is QualityStatus.PASSED
+    assert explanation.score == 0.75
+
+
 def test_context_alignment_uses_source_groundedness_when_source_is_supplied() -> None:
     checks, mode, _ = run_deterministic_quality_checks(
         mcq_question(),
@@ -379,12 +418,43 @@ def test_context_alignment_uses_source_groundedness_when_source_is_supplied() ->
     assert "source_groundedness" in context_check.reason
 
 
+def test_topic_alignment_without_token_overlap_is_deferred_to_semantic_judge() -> None:
+    checks, mode, _ = run_deterministic_quality_checks(
+        mcq_question(question="Which biological mechanism stores incoming radiation as glucose?"),
+        topic="photosynthesis",
+    )
+    context_check = next(
+        check for check in checks if check.dimension is QualityDimension.CONTEXT_ALIGNMENT
+    )
+
+    assert mode is ContextAlignmentMode.TOPIC_RELEVANCE
+    assert context_check.status is QualityStatus.NOT_EVALUATED
+    assert context_check.passed is None
+
+
 def test_judge_evaluation_contract_accepts_valid_payload() -> None:
     evaluation = validate_judge_evaluation(valid_judge_payload())
 
     assert isinstance(evaluation, LLMJudgeReport)
     assert evaluation.overall_score == 0.86
     assert not evaluation.requires_secondary_review
+
+
+def test_judge_evaluation_normalizes_string_issues() -> None:
+    failed_explanation = dimension_result(
+        QualityDimension.EXPLANATION_QUALITY,
+        score=0.4,
+        status=QualityStatus.FAILED,
+        passed=False,
+    )
+    failed_explanation["issues"] = ["The explanation does not teach the underlying concept."]
+
+    evaluation = validate_judge_evaluation(
+        valid_judge_payload(explanation_quality=failed_explanation)
+    )
+
+    assert evaluation.explanation_quality.issues[0].code == "weak_explanation"
+    assert evaluation.explanation_quality.issues[0].affected_option_ids == []
 
 
 def test_judge_evaluation_rejects_wrong_dimension_field() -> None:
@@ -515,10 +585,36 @@ def test_policy_escalates_near_threshold_judge_score() -> None:
         checks,
         duplicate_risk_score=duplicate_score,
         judge_evaluation=validate_judge_evaluation(valid_judge_payload(overall_score=0.75)),
-        config=QualityPolicyConfig(secondary_judge_margin=0.03),
+        config=QualityPolicyConfig(minimum_judge_score=0.75, secondary_judge_margin=0.03),
     )
 
     assert decision is QualityDecision.ESCALATE_TO_SECONDARY_JUDGE
+
+
+def test_policy_accepts_soft_judge_weaknesses_when_overall_quality_is_sufficient() -> None:
+    checks, _, duplicate_score = run_deterministic_quality_checks(
+        mcq_question(),
+        topic="plants light energy photosynthesis",
+    )
+    soft_failure = dimension_result(
+        QualityDimension.DISTRACTOR_QUALITY,
+        score=0.55,
+        status=QualityStatus.FAILED,
+        passed=False,
+        reason="One distractor is easy to eliminate.",
+    )
+    decision = decide_quality_outcome(
+        checks,
+        duplicate_risk_score=duplicate_score,
+        judge_evaluation=validate_judge_evaluation(
+            valid_judge_payload(
+                distractor_quality=soft_failure,
+                overall_score=0.7,
+            )
+        ),
+    )
+
+    assert decision is QualityDecision.ACCEPT
 
 
 def test_duplicate_question_causes_regeneration() -> None:
@@ -603,6 +699,23 @@ def test_question_quality_evaluator_uses_primary_judge_without_secondary_when_no
     assert primary_judge.calls == 1
     assert secondary_judge.calls == 0
     assert report.secondary_judge_evaluation is None
+
+
+def test_question_quality_evaluator_skips_judge_for_deterministic_failure() -> None:
+    primary_judge = FakeJudge(validate_judge_evaluation(valid_judge_payload()))
+    question = fill_blank_question(question="Photosynthesis happens through ___.")
+    context = QuestionEvaluationContext(
+        question=question,
+        topic="photosynthesis",
+        requested_difficulty=question.difficulty,
+        language="English",
+    )
+
+    report = asyncio.run(QuestionQualityEvaluator(primary_judge=primary_judge).evaluate(context))
+
+    assert report.decision is QualityDecision.REGENERATE
+    assert primary_judge.calls == 0
+    assert report.judge_evaluation is None
 
 
 def test_question_quality_evaluator_calls_secondary_only_for_required_review() -> None:

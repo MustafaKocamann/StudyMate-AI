@@ -11,13 +11,10 @@ from src.evaluation.models import (
 )
 
 
-CRITICAL_DIMENSIONS = {
+SEMANTIC_CRITICAL_DIMENSIONS = {
     QualityDimension.ANSWER_VALIDITY,
-    QualityDimension.EXPLANATION_QUALITY,
-    QualityDimension.DIFFICULTY_ALIGNMENT,
     QualityDimension.CONTEXT_ALIGNMENT,
     QualityDimension.ANSWER_LEAKAGE,
-    QualityDimension.DUPLICATE_RISK,
 }
 
 
@@ -34,13 +31,16 @@ def decide_quality_outcome(
     if duplicate_risk_score >= policy_config.duplicate_fuzzy_threshold:
         return QualityDecision.REGENERATE
 
-    if any(_is_applicable_critical_failure(check) for check in checks):
+    # Deterministic failures are concrete defects and always regenerate. The
+    # LLM judge is intentionally narrower: subjective weaknesses affect the
+    # overall score, while correctness, context, and leakage remain fail-closed.
+    if any(check.passed is False for check in checks):
         return QualityDecision.REGENERATE
 
     if judge_evaluation is None:
         return QualityDecision.ACCEPT
 
-    if any(_is_applicable_critical_failure(check) for check in judge_evaluation.checks):
+    if any(_is_semantic_critical_failure(check) for check in judge_evaluation.checks):
         return QualityDecision.REGENERATE
 
     if judge_evaluation.confidence < policy_config.minimum_judge_confidence:
@@ -55,16 +55,14 @@ def decide_quality_outcome(
     if any(
         check.score is not None and check.score < policy_config.minimum_dimension_score
         for check in judge_evaluation.checks
-        if check.passed is not None
+        if check.dimension in SEMANTIC_CRITICAL_DIMENSIONS and check.passed is not None
     ):
         return QualityDecision.REGENERATE
 
     return QualityDecision.ACCEPT
 
 
-def _is_applicable_critical_failure(check: QualityDimensionResult) -> bool:
+def _is_semantic_critical_failure(check: QualityDimensionResult) -> bool:
     if check.passed is not False:
         return False
-    if check.dimension in CRITICAL_DIMENSIONS:
-        return True
-    return check.dimension is QualityDimension.DISTRACTOR_QUALITY
+    return check.dimension in SEMANTIC_CRITICAL_DIMENSIONS

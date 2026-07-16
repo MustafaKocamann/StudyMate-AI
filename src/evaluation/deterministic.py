@@ -131,11 +131,7 @@ def _distractor_quality_check(question: GeneratedQuestion) -> QualityDimensionRe
         for option_text in option_texts
         for generic_option in GENERIC_BAD_OPTIONS
     )
-    correct_option = next(option for option in question.options if option.id == question.correct_option_id)
-    longest_option_length = max(len(option.text) for option in question.options)
-    correct_is_much_longer = len(correct_option.text) > longest_option_length * 0.75 and len(correct_option.text) > 80
-
-    if has_generic_option or correct_is_much_longer:
+    if has_generic_option:
         return _failed_result(
             QualityDimension.DISTRACTOR_QUALITY,
             score=0.4,
@@ -199,11 +195,15 @@ def _explanation_quality_check(
                 message="The explanation repeats only the answer with no conceptual context.",
             ),
         )
-    if explanation_mentions_answer and len(explanation_tokens) >= 6:
+    if len(explanation_tokens) >= 6:
         return _passed_result(
             QualityDimension.EXPLANATION_QUALITY,
-            score=0.9,
-            reason="Explanation names the answer and provides enough context.",
+            score=0.9 if explanation_mentions_answer else 0.75,
+            reason=(
+                "Explanation names the answer and provides enough context."
+                if explanation_mentions_answer
+                else "Explanation contains enough context for semantic judge review."
+            ),
         )
     return _failed_result(
         QualityDimension.EXPLANATION_QUALITY,
@@ -276,7 +276,16 @@ def _context_alignment_check(
             context_alignment_mode=mode,
         )
 
-    issue_code = "unsupported_by_source" if source_content else "topic_mismatch"
+    if mode is ContextAlignmentMode.TOPIC_RELEVANCE:
+        return QualityDimensionResult(
+            dimension=QualityDimension.CONTEXT_ALIGNMENT,
+            status=QualityStatus.NOT_EVALUATED,
+            passed=None,
+            score=None,
+            reason="Exact topic-token overlap is absent; semantic judge review is required.",
+            context_alignment_mode=mode,
+        )
+
     return QualityDimensionResult(
         dimension=QualityDimension.CONTEXT_ALIGNMENT,
         status=QualityStatus.FAILED,
@@ -285,7 +294,7 @@ def _context_alignment_check(
         reason=f"Deterministic {mode.value} token overlap is missing.",
         issues=[
             QualityIssue(
-                code=issue_code,
+                code="unsupported_by_source",
                 message="The question text has no detectable token overlap with the supplied context.",
             )
         ],

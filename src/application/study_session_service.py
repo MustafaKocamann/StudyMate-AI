@@ -88,6 +88,22 @@ class StudySessionService:
         updated_session = session.model_copy(update={"attempts": updated_attempts})
         return updated_session, attempt, result
 
+    def append_question(self, session: StudySession, question: GeneratedQuestion) -> StudySession:
+        """Append one lazily generated question while preserving session invariants."""
+
+        if session.status is not StudySessionStatus.ACTIVE:
+            raise ValueError("questions can only be appended to an active session")
+        if len(session.questions) >= 20:
+            raise ValueError("a study session cannot contain more than 20 questions")
+        if any(existing.id == question.id for existing in session.questions):
+            raise ValueError("session questions must have unique IDs")
+        return StudySession.model_validate(
+            {
+                **session.model_dump(mode="python"),
+                "questions": [*session.questions, question],
+            }
+        )
+
     def advance(self, session: StudySession) -> StudySession:
         if session.current_position == len(session.questions):
             return session.model_copy(

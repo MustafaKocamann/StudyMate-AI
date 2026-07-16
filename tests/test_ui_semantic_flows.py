@@ -12,9 +12,9 @@ def _practice_source(*, question_type: str = "mcq", fail: bool = False, hints: b
         """
         question = MCQQuestion(
             type=QuestionType.MCQ,
-            position=1,
+            position=position,
             question="Which structure stores key-value pairs?",
-            difficulty=kwargs["difficulty"],
+            difficulty=difficulty,
             explanation="A dictionary maps unique keys to values.",
             options=[
                 QuestionOption(id="A", text="Dictionary"),
@@ -29,9 +29,9 @@ def _practice_source(*, question_type: str = "mcq", fail: bool = False, hints: b
         else """
         question = FillBlankQuestion(
             type=QuestionType.FILL_BLANK,
-            position=1,
+            position=position,
             question="A Python mapping is called a ___.",
-            difficulty=kwargs["difficulty"],
+            difficulty=difficulty,
             explanation="A dictionary stores mappings from keys to values.",
             answer="dictionary",
         )
@@ -39,11 +39,18 @@ def _practice_source(*, question_type: str = "mcq", fail: bool = False, hints: b
     )
     service_body = (
         'raise RuntimeError("private provider detail")'
-        if fail
-        else f"""
+        if fail else """
         self.calls += 1
-{question_code}
-        return QuestionSet(questions=[question])
+        return QuestionSet(questions=[self._build_question(kwargs["difficulty"], 1)])
+        """
+    )
+    next_service_body = (
+        'raise RuntimeError("private provider detail")'
+        if fail else """
+        self.calls += 1
+        return SimpleNamespace(
+            question=self._build_question(request.difficulty, request.position)
+        )
         """
     )
     hint_setup = (
@@ -62,6 +69,7 @@ class FakeHintProvider:
     )
     return f"""
 import streamlit as st
+from types import SimpleNamespace
 from src.models.question_schemas import (
     DifficultyLevel,
     FillBlankQuestion,
@@ -77,8 +85,15 @@ class FakeQuestionService:
     def __init__(self):
         self.calls = 0
 
+    def _build_question(self, difficulty, position):
+{question_code}
+        return question
+
     async def generate_questions(self, **kwargs):
         {service_body}
+
+    async def generate_question(self, request, **kwargs):
+        {next_service_body}
 
 {hint_setup}
 initialize_state()
@@ -89,13 +104,21 @@ render_practice_page()
 """
 
 
-def _start_practice(*, question_type: str = "mcq", hints: bool = False) -> AppTest:
+def _start_practice(
+    *,
+    question_type: str = "mcq",
+    hints: bool = False,
+    question_count: int = 1,
+) -> AppTest:
     app = AppTest.from_string(
         _practice_source(question_type=question_type, hints=hints)
     ).run(timeout=10)
     next(
         field for field in app.text_input if field.label == "What would you like to study?"
     ).set_value("Python dictionaries")
+    next(
+        field for field in app.number_input if field.label == "Number of questions"
+    ).set_value(question_count)
     if hints:
         next(
             checkbox for checkbox in app.checkbox if checkbox.label == "Enable progressive hints"
@@ -188,6 +211,29 @@ def test_mcq_feedback_confidence_and_duplicate_rerun_safety() -> None:
     assert [success.value for success in app.success] == ["Correct"]
     assert "A dictionary maps unique keys to values." in _visible_text(app)
     assert len(app.session_state["study_repository"].list_attempts()) == 1
+
+
+def test_practice_generates_follow_up_question_lazily() -> None:
+    app = _start_practice(question_count=2)
+    assert app.session_state["study_question_service"].calls == 1
+    assert len(app.session_state["active_session"].questions) == 1
+
+    app.radio[0].set_value(app.radio[0].options[0])
+    confidence = next(
+        field for field in app.selectbox if field.label == "How confident are you?"
+    )
+    confidence.set_value(confidence.options[3])
+    next(button for button in app.button if button.label == "Check answer").click().run(
+        timeout=10
+    )
+    next(button for button in app.button if button.label == "Next question").click().run(
+        timeout=10
+    )
+
+    assert not app.exception
+    assert app.session_state["study_question_service"].calls == 2
+    assert len(app.session_state["active_session"].questions) == 2
+    assert app.session_state["active_session"].current_position == 2
 
     app.run(timeout=10)
 

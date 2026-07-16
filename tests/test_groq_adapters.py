@@ -267,8 +267,8 @@ def test_application_container_reuses_gateway_and_separates_profiles() -> None:
 
 def test_application_container_missing_key_fails_safely_without_fake_gateway() -> None:
     settings = Settings()
-    if settings.groq.api_key is not None:
-        pytest.skip("developer environment has GROQ_API_KEY configured")
+    if settings.groq.api_key is not None or settings.gemini.api_key is not None:
+        pytest.skip("developer environment has an LLM API key configured")
 
     with pytest.raises(ApplicationConfigurationError):
         build_application_container(app_settings=settings)

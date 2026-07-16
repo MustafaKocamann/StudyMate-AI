@@ -233,8 +233,8 @@ class QualityPolicyConfig(EvaluationModel):
     """Thresholds used to convert quality signals into a final decision."""
 
     minimum_dimension_score: float = Field(default=0.70, ge=0.0, le=1.0)
-    minimum_judge_score: float = Field(default=0.75, ge=0.0, le=1.0)
+    minimum_judge_score: float = Field(default=0.65, ge=0.0, le=1.0)
     minimum_judge_confidence: float = Field(default=0.65, ge=0.0, le=1.0)
-    secondary_judge_margin: float = Field(default=0.08, ge=0.0, le=1.0)
+    secondary_judge_margin: float = Field(default=0.03, ge=0.0, le=1.0)
     duplicate_rejection_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
     duplicate_fuzzy_threshold: float = Field(default=0.92, ge=0.0, le=1.0)

@@ -89,7 +89,7 @@ class QuestionQualityEvaluator:
     def __init__(
         self,
         *,
-        primary_judge: QuestionJudge,
+        primary_judge: QuestionJudge | None = None,
         secondary_judge: QuestionJudge | None = None,
         policy_config: QualityPolicyConfig | None = None,
     ) -> None:
@@ -107,6 +107,29 @@ class QuestionQualityEvaluator:
             requested_difficulty=context.requested_difficulty,
             policy_config=self.policy_config,
         )
+        deterministic_decision = decide_quality_outcome(
+            checks,
+            duplicate_risk_score=duplicate_score,
+            config=self.policy_config,
+        )
+        if deterministic_decision is QualityDecision.REGENERATE:
+            return _build_quality_report(
+                question=context.question,
+                checks=checks,
+                duplicate_score=duplicate_score,
+                judge_evaluation=None,
+                secondary_judge_evaluation=None,
+                policy_config=self.policy_config,
+            )
+        if self.primary_judge is None:
+            return _build_quality_report(
+                question=context.question,
+                checks=checks,
+                duplicate_score=duplicate_score,
+                judge_evaluation=None,
+                secondary_judge_evaluation=None,
+                policy_config=self.policy_config,
+            )
         try:
             primary_report = await self.primary_judge.evaluate(context, checks)
             secondary_report = None
@@ -124,6 +147,7 @@ class QuestionQualityEvaluator:
         return _build_quality_report(
             question=context.question,
             checks=merged_checks,
+            policy_checks=checks,
             duplicate_score=duplicate_score,
             judge_evaluation=reconciled_report,
             secondary_judge_evaluation=secondary_report,
@@ -135,13 +159,14 @@ def _build_quality_report(
     *,
     question: GeneratedQuestion,
     checks: list[QualityDimensionResult],
+    policy_checks: list[QualityDimensionResult] | None = None,
     duplicate_score: float,
     judge_evaluation: LLMJudgeReport | None,
     secondary_judge_evaluation: LLMJudgeReport | None,
     policy_config: QualityPolicyConfig | None,
 ) -> QuestionQualityReport:
     decision = decide_quality_outcome(
-        checks,
+        policy_checks or checks,
         duplicate_risk_score=duplicate_score,
         judge_evaluation=judge_evaluation,
         config=policy_config,

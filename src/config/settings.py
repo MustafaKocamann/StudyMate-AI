@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 DEFAULT_GROQ_MODEL = "qwen/qwen3.6-27b"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
 load_dotenv()
 
@@ -39,6 +40,8 @@ class GroqSettings(BaseSettings):
     judge_reasoning_effort: str | None = Field(default="none")
 
     sdk_max_retries: int = Field(default=2, ge=0, le=10)
+    generation_max_attempts: int = Field(default=3, ge=1, le=10)
+    enable_quality_judge: bool = True
 
     @field_validator("api_key")
     @classmethod
@@ -72,6 +75,54 @@ class GroqSettings(BaseSettings):
         return self.api_key
 
 
+class GeminiSettings(BaseSettings):
+    """Gemini configuration optimized for low-latency interactive practice."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="GEMINI_",
+        extra="ignore",
+        validate_assignment=True,
+    )
+
+    api_key: SecretStr | None = Field(default=None)
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    generation_model: str = Field(default=DEFAULT_GEMINI_MODEL, min_length=1)
+    generation_temperature: float = Field(default=0.35, ge=0.0, le=2.0)
+    generation_max_completion_tokens: int = Field(default=768, gt=0)
+    generation_timeout_seconds: float = Field(default=20.0, gt=0)
+    generation_reasoning_effort: str | None = None
+    generation_max_attempts: int = Field(default=2, ge=1, le=3)
+
+    judge_model: str | None = None
+    judge_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    judge_max_completion_tokens: int = Field(default=512, gt=0)
+    judge_timeout_seconds: float = Field(default=20.0, gt=0)
+    judge_reasoning_effort: str | None = None
+    enable_quality_judge: bool = False
+
+    sdk_max_retries: int = Field(default=1, ge=0, le=2)
+    retry_max_delay_seconds: float = Field(default=2.0, ge=0.0, le=5.0)
+    thinking_budget: int = Field(default=0, ge=0, le=24_576)
+
+    @field_validator("api_key")
+    @classmethod
+    def empty_api_key_as_missing(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not value.get_secret_value().strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def default_judge_model(self) -> GeminiSettings:
+        if self.judge_model is None:
+            self.judge_model = self.generation_model
+        return self
+
+    def require_api_key(self) -> SecretStr:
+        if self.api_key is None:
+            raise ValueError("GEMINI_API_KEY must be configured before constructing Gemini services")
+        return self.api_key
+
+
 class Settings(BaseSettings):
     """Root settings object.
 
@@ -84,6 +135,10 @@ class Settings(BaseSettings):
     @cached_property
     def groq(self) -> GroqSettings:
         return GroqSettings()
+
+    @cached_property
+    def gemini(self) -> GeminiSettings:
+        return GeminiSettings()
 
     @property
     def GROQ_API_KEY(self) -> SecretStr | None:

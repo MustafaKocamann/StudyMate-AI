@@ -56,7 +56,7 @@ class LLMCompletionResult(BaseModel):
 
 
 def generation_profile_from_settings(settings: object) -> CompletionProfile:
-    """Build an immutable generation profile from Groq settings."""
+    """Build an immutable generation profile from provider settings."""
 
     return CompletionProfile(
         model=settings.generation_model,
@@ -69,7 +69,7 @@ def generation_profile_from_settings(settings: object) -> CompletionProfile:
 
 
 def judge_profile_from_settings(settings: object) -> CompletionProfile:
-    """Build an immutable judge profile from Groq settings."""
+    """Build an immutable judge profile from provider settings."""
 
     return CompletionProfile(
         model=settings.judge_model or settings.generation_model,
