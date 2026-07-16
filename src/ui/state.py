@@ -33,6 +33,15 @@ class StateKey(StrEnum):
     LAST_FEEDBACK = "last_feedback"
     USER_PREFERENCES = "user_preferences"
     HINT_LEVEL = "hint_level"
+    HINT_TEXT = "hint_text"
+    GENERATION_ERROR = "generation_error"
+    ACTIVE_REVIEW_ITEM = "active_review_item"
+    REVIEW_SESSION = "review_session"
+    REVIEW_FEEDBACK = "review_feedback"
+    REVIEW_PHASE = "review_phase"
+    REVIEW_QUEUE = "review_queue"
+    REVIEW_COMPLETED_COUNT = "review_completed_count"
+    REVIEW_TOTAL_COUNT = "review_total_count"
 
 
 DEFAULT_PREFERENCES = {
@@ -54,7 +63,16 @@ def initialize_state() -> None:
     st.session_state.setdefault(StateKey.UI_PHASE.value, UIPhase.CONFIGURING.value)
     st.session_state.setdefault(StateKey.LAST_FEEDBACK.value, None)
     st.session_state.setdefault(StateKey.HINT_LEVEL.value, 0)
+    st.session_state.setdefault(StateKey.HINT_TEXT.value, None)
+    st.session_state.setdefault(StateKey.GENERATION_ERROR.value, None)
     st.session_state.setdefault(StateKey.USER_PREFERENCES.value, DEFAULT_PREFERENCES.copy())
+    st.session_state.setdefault(StateKey.ACTIVE_REVIEW_ITEM.value, None)
+    st.session_state.setdefault(StateKey.REVIEW_SESSION.value, None)
+    st.session_state.setdefault(StateKey.REVIEW_FEEDBACK.value, None)
+    st.session_state.setdefault(StateKey.REVIEW_PHASE.value, UIPhase.CONFIGURING.value)
+    st.session_state.setdefault(StateKey.REVIEW_QUEUE.value, [])
+    st.session_state.setdefault(StateKey.REVIEW_COMPLETED_COUNT.value, 0)
+    st.session_state.setdefault(StateKey.REVIEW_TOTAL_COUNT.value, 0)
 
 
 def repository() -> InMemoryStudyRepository:
@@ -68,3 +86,32 @@ def set_phase(phase: UIPhase) -> None:
 
 def phase() -> UIPhase:
     return UIPhase(st.session_state.get(StateKey.UI_PHASE.value, UIPhase.CONFIGURING.value))
+
+
+def reset_practice_flow() -> None:
+    """Return practice UI state to a clean, rerun-safe configuration phase."""
+
+    st.session_state[StateKey.ACTIVE_SESSION.value] = None
+    st.session_state[StateKey.LAST_FEEDBACK.value] = None
+    st.session_state[StateKey.HINT_LEVEL.value] = 0
+    st.session_state[StateKey.HINT_TEXT.value] = None
+    st.session_state[StateKey.GENERATION_ERROR.value] = None
+    set_phase(UIPhase.CONFIGURING)
+
+
+def reset_review_flow() -> None:
+    """Clear transient review UI state without changing repository data."""
+
+    reset_current_review_item()
+    st.session_state[StateKey.REVIEW_QUEUE.value] = []
+    st.session_state[StateKey.REVIEW_COMPLETED_COUNT.value] = 0
+    st.session_state[StateKey.REVIEW_TOTAL_COUNT.value] = 0
+    st.session_state[StateKey.REVIEW_PHASE.value] = UIPhase.CONFIGURING.value
+
+
+def reset_current_review_item() -> None:
+    """Clear one review question while preserving batch progress."""
+
+    st.session_state[StateKey.ACTIVE_REVIEW_ITEM.value] = None
+    st.session_state[StateKey.REVIEW_SESSION.value] = None
+    st.session_state[StateKey.REVIEW_FEEDBACK.value] = None

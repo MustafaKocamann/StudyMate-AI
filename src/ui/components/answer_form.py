@@ -12,11 +12,20 @@ from src.ui.helpers import build_widget_key
 
 
 CONFIDENCE_LABELS = {
-    ConfidenceLevel.GUESSED: "1 - Guessed",
-    ConfidenceLevel.LOW: "2 - Low",
-    ConfidenceLevel.MEDIUM: "3 - Medium",
-    ConfidenceLevel.HIGH: "4 - High",
-    ConfidenceLevel.VERY_HIGH: "5 - Very high",
+    "en": {
+        ConfidenceLevel.GUESSED: "1 — Guessed",
+        ConfidenceLevel.LOW: "2 — Low confidence",
+        ConfidenceLevel.MEDIUM: "3 — Moderately confident",
+        ConfidenceLevel.HIGH: "4 — Confident",
+        ConfidenceLevel.VERY_HIGH: "5 — Very confident",
+    },
+    "tr": {
+        ConfidenceLevel.GUESSED: "1 — Tahmin ettim",
+        ConfidenceLevel.LOW: "2 — Güvenim düşük",
+        ConfidenceLevel.MEDIUM: "3 — Orta düzeyde eminim",
+        ConfidenceLevel.HIGH: "4 — Eminim",
+        ConfidenceLevel.VERY_HIGH: "5 — Çok eminim",
+    },
 }
 
 
@@ -25,7 +34,11 @@ def render_answer_form(
     *,
     session_id: UUID,
     confidence_required: bool,
+    language: str = "English",
 ) -> tuple[bool, LearnerAnswer | None, ConfidenceLevel | None]:
+    language_code = _language_code(language)
+    confidence_labels = CONFIDENCE_LABELS[language_code]
+    unknown_label = "Bilmiyorum" if language_code == "tr" else "I do not know"
     form_key = build_widget_key(
         "answer-form",
         session_id=session_id,
@@ -34,7 +47,12 @@ def render_answer_form(
     )
     with st.form(key=form_key, clear_on_submit=False):
         unknown = st.checkbox(
-            "I do not know",
+            unknown_label,
+            help=(
+                "Tahmin etmek yerine açıklamayı görmek için bunu seçin."
+                if language_code == "tr"
+                else "Choose this to see the explanation without guessing."
+            ),
             key=build_widget_key(
                 "answer-unknown",
                 session_id=session_id,
@@ -44,11 +62,13 @@ def render_answer_form(
         )
         learner_answer: LearnerAnswer | None = None
         if isinstance(question, MCQQuestion):
+            option_text = {option.id: option.text for option in question.options}
             selected = st.radio(
-                "Choose one option",
-                [option.id for option in question.options],
+                "Choose one answer",
+                list(option_text),
                 index=None,
                 disabled=unknown,
+                format_func=lambda option_id: f"{option_id}. {option_text[option_id]}",
                 key=build_widget_key(
                     "answer-mcq-option",
                     session_id=session_id,
@@ -63,6 +83,7 @@ def render_answer_form(
         elif isinstance(question, FillBlankQuestion):
             submitted = st.text_input(
                 "Your answer",
+                placeholder="Type the missing word or phrase",
                 disabled=unknown,
                 key=build_widget_key(
                     "answer-fill-blank",
@@ -78,11 +99,19 @@ def render_answer_form(
 
         confidence_value = None
         if confidence_required:
-            confidence_value = st.select_slider(
-                "Confidence",
-                options=list(CONFIDENCE_LABELS),
-                format_func=lambda value: CONFIDENCE_LABELS[value],
-                help="Use confidence for review priority; it does not change correctness.",
+            confidence_value = st.selectbox(
+                "Ne kadar eminsiniz?" if language_code == "tr" else "How confident are you?",
+                options=[None, *confidence_labels],
+                format_func=lambda value: (
+                    ("Güven düzeyi seçin" if language_code == "tr" else "Select confidence")
+                    if value is None
+                    else confidence_labels[value]
+                ),
+                help=(
+                    "Güven düzeyi tekrar planlamasına yardımcı olur; doğruluğu değiştirmez."
+                    if language_code == "tr"
+                    else "Confidence helps schedule useful reviews. It never changes correctness."
+                ),
                 key=build_widget_key(
                     "answer-confidence",
                     session_id=session_id,
@@ -91,14 +120,29 @@ def render_answer_form(
                 ),
             )
         submitted_form = st.form_submit_button(
-            "Submit answer",
+            "Check answer",
             type="primary",
+            icon=":material/check:",
+            width="stretch",
         )
 
     if submitted_form and learner_answer is None:
-        st.error("Please answer the question or choose I do not know.")
+        st.error(
+            "Bir yanıt seçin veya “Bilmiyorum” seçeneğini işaretleyin."
+            if language_code == "tr"
+            else "Choose an answer or select “I do not know.”"
+        )
         return False, None, None
     if submitted_form and confidence_required and confidence_value is None:
-        st.error("Please choose your confidence before submitting.")
+        st.error(
+            "Yanıtınızı kontrol etmeden önce bir güven düzeyi seçin."
+            if language_code == "tr"
+            else "Choose a confidence level before checking your answer."
+        )
         return False, None, None
     return submitted_form, learner_answer, confidence_value
+
+
+def _language_code(language: str) -> str:
+    normalized = language.strip().casefold()
+    return "tr" if normalized.startswith("tr") or normalized in {"turkish", "türkçe", "turkce"} else "en"

@@ -1,6 +1,15 @@
 [theme]
-primaryColor = "#2563eb"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f8fafc"
-textColor = "#0f172a"
-font = "sans serif"
+base = "light"
+primaryColor = "#356859"
+backgroundColor = "#FBFCFA"
+secondaryBackgroundColor = "#F1F5F2"
+textColor = "#1F2A27"
+font = "sans-serif"
+headingFont = "sans-serif"
+baseRadius = "0.75rem"
+buttonRadius = "0.65rem"
+borderColor = "#DCE5E1"
+
+[theme.sidebar]
+backgroundColor = "#F4F7F5"
+secondaryBackgroundColor = "#E8EFEB"
